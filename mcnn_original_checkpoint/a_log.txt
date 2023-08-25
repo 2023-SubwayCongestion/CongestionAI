@@ -1,0 +1,10 @@
+MSELoss(size_average=False)
+optimizer = SGD
+lr=1e-6
+momentum=0.95
+downsample = 4
+batch_size = 1
+max_epoch = 2000
+preprocessint: none(k-nearest gausian filter 이외에 없음)
+
+best model = 1964 epoch, 114.242 mae
