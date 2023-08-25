@@ -57,7 +57,8 @@ def gaussian_filter_density(img,points):
 # test code
 if __name__=="__main__":
     # show an example to use function generate_density_map_with_fixed_kernel.
-    root = 'D:\\workspaceMaZhenwei\\GithubProject\\Crowd_counting_from_scratch\\data'
+    # root = 'D:\\workspaceMaZhenwei\\GithubProject\\Crowd_counting_from_scratch\\data'
+    root = r'/home/add/dataset/ShanghaiTech'
     
     # now generate the ShanghaiA's ground truth
     part_A_train = os.path.join(root,'part_A_final/train_data','images')
@@ -73,14 +74,14 @@ if __name__=="__main__":
     
     for img_path in img_paths:
         print(img_path)
-        mat = io.loadmat(img_path.replace('.jpg','.mat').replace('images','ground_truth').replace('IMG_','GT_IMG_'))
+        mat = io.loadmat(img_path.replace('.jpg','.mat').replace('images','ground-truth').replace('IMG_','GT_IMG_'))
         img= plt.imread(img_path)#768行*1024列
         k = np.zeros((img.shape[0],img.shape[1]))
         points = mat["image_info"][0,0][0,0][0] #1546person*2(col,row)
         k = gaussian_filter_density(img,points)
         # plt.imshow(k,cmap=CM.jet)
         # save density_map to disk
-        np.save(img_path.replace('.jpg','.npy').replace('images','ground_truth'), k)
+        np.save(img_path.replace('.jpg','.npy').replace('images','ground-truth'), k)
     
     '''
     #now see a sample from ShanghaiA
