@@ -17,7 +17,7 @@ def cal_mae(img_root,gt_dmap_root,model_param_path):
     device=torch.device("cuda")
     mcnn=MCNN().to(device)
     mcnn.load_state_dict(torch.load(model_param_path))
-    dataset=CrowdDataset(img_root,gt_dmap_root,4)
+    dataset=CrowdDataset(img_root,gt_dmap_root,4, dataset_name = 'SHA', is_train = False)
     dataloader=torch.utils.data.DataLoader(dataset,batch_size=1,shuffle=False)
     mcnn.eval()
     mae=0
@@ -43,7 +43,7 @@ def estimate_density_map(img_root,gt_dmap_root,model_param_path,index):
     device=torch.device("cuda")
     mcnn=MCNN().to(device)
     mcnn.load_state_dict(torch.load(model_param_path))
-    dataset=CrowdDataset(img_root,gt_dmap_root,4)
+    dataset=CrowdDataset(img_root,gt_dmap_root,4, dataset_name = 'SHA', is_train = False)
     dataloader=torch.utils.data.DataLoader(dataset,batch_size=1,shuffle=False)
     mcnn.eval()
     for i,(img,gt_dmap) in enumerate(dataloader):

@@ -19,12 +19,12 @@ if __name__=="__main__":
     
     img_root='/home/add/dataset/ShanghaiTech/part_A_final/train_data/images'
     gt_dmap_root='/home/add/dataset/ShanghaiTech/part_A_final/train_data/ground-truth'
-    dataset=CrowdDataset(img_root,gt_dmap_root,4)
+    dataset=CrowdDataset(img_root,gt_dmap_root,4, dataset_name = 'SHA', is_train = True)
     dataloader=torch.utils.data.DataLoader(dataset,batch_size=1,shuffle=True)
 
     test_img_root='/home/add/dataset/ShanghaiTech/part_A_final/test_data/images'
     test_gt_dmap_root='/home/add/dataset/ShanghaiTech/part_A_final/test_data/ground-truth'
-    test_dataset=CrowdDataset(test_img_root,test_gt_dmap_root,4)
+    test_dataset=CrowdDataset(test_img_root,test_gt_dmap_root,4, dataset_name = 'SHA', is_train = False)
     test_dataloader=torch.utils.data.DataLoader(test_dataset,batch_size=1,shuffle=False)
 
     #training phase
