@@ -4,11 +4,12 @@ from scipy.ndimage import label
 import torch
 import matplotlib.pyplot as plt
 import matplotlib.cm as CM
-
+from PIL import Image
+from torchvision import transforms as T
 from mcnn_model import MCNN
 from my_dataloader import CrowdDataset
 
-def infer_and_save(model, image_path, save_path):
+def inferenceMCNN(model, image_path, save_path):
     '''
     Infer the crowd count and save the overlaid image.
 
@@ -19,33 +20,52 @@ def infer_and_save(model, image_path, save_path):
 
     device = torch.device("cuda")
 
-    # Load image
-    img = cv2.imread(image_path)
-    img_transformed = dataset.transform(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))  # Assuming the dataset has a transform method
-    img_transformed = img_transformed.unsqueeze(0).to(device)
+    # 이미지 로드
+    image = Image.open(image_path).convert('RGB')
+    img_array = np.array(image)  # PIL 이미지를 Numpy array로 변환
+    #image = image.convert('RGB')
+    
+    # 이미지 전처리
+    transform = T.Compose([
+        T.Resize((400, 400)),  # 예: 원래 크기에 맞게 조정해야 합니다.
+        T.ToTensor(),
+        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    img = transform(image)
+    img = img.unsqueeze(0)  # 배치 차원 추가
+    img = img.to(device)
 
-    # Infer density map
+    # density map 추론
     model.eval()
-    with torch.no_grad():
-        et_dmap = model(img_transformed).squeeze(0).squeeze(0).cpu().numpy()
+    et_dmap = model(img)
 
-    # Count people by integrating the density map
-    crowd_count = int(np.sum(et_dmap))
+    # density map 더하여 총 인원 수 카운트
+    crowd_count = int(torch.sum(et_dmap).item())
 
     # Localize points of maximum densities (peaks)
-    labeled, num_features = label(et_dmap > (0.2 * et_dmap.max()))  # The threshold can be tuned
-    locations = []
-    for i in range(num_features):
-        locations.append(np.unravel_index(et_dmap.argmax(), et_dmap.shape))
-        et_dmap[locations[-1]] = 0
+    et_dmap_cpu = et_dmap.detach().cpu().numpy()
+    # Normalize
+    dmap_norm = (et_dmap_cpu[0,0] - et_dmap_cpu[0,0].min()) / (et_dmap_cpu[0,0].max() - et_dmap_cpu[0,0].min())
+    dmap_scaled = (255 * dmap_norm).astype(np.uint8)
 
-    # Overlay the points on the image
-    for loc in locations:
-        y, x = loc
-        cv2.circle(img, (x, y), 5, (0, 0, 255), -1)
+    # Save density map to image
+    cv2.imwrite(save_path, dmap_scaled)
+    # labeled, num_features = label(et_dmap_cpu > (0.5 * et_dmap_cpu.max()))  # threshold 0.5
 
-    # Save the result
-    cv2.imwrite(save_path, img)
+    # locations = []
+    # for i in range(num_features):
+    #     max_val_idx = et_dmap.argmax().item()
+    #     loc = np.unravel_index(max_val_idx, et_dmap[0, 0].shape)  # 2D shape를 사용
+    #     locations.append(loc)
+    #     et_dmap[0, 0, loc[0], loc[1]] = 0
+    # print(locations)
+    # # 이미지 위에 결과 중첩
+    # for loc in locations:
+    #     x, y = loc
+    #     cv2.circle(img_array, (x, y), 5, (0, 0, 255), -1)
+
+    # # 결과 저장
+    # cv2.imwrite(save_path, img_array)
 
     print(f"Estimated crowd count: {crowd_count}")
     return crowd_count
@@ -53,11 +73,11 @@ def infer_and_save(model, image_path, save_path):
 if __name__ == "__main__":
     torch.backends.cudnn.enabled = False
 
-    model_param_path = './checkpoints/epoch_63.param'
+    model_param_path = './checkpoints/epoch_test.param'
     mcnn = MCNN().to(torch.device("cuda"))
     mcnn.load_state_dict(torch.load(model_param_path))
 
-    image_path = './demo/image.jpg'
-    save_path = './demo/image.jpg'
+    image_path = './demo/image.png'
+    save_path = './demo/result/image.png'
 
-    infer_and_save(mcnn, image_path, save_path)
+    inferenceMCNN(mcnn, image_path, save_path)

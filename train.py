@@ -6,7 +6,7 @@ import random
 import argparse
 from tqdm import tqdm
 from mcnn_model import MCNN
-from my_dataloader import CrowdDataset
+from my_dataloader_origin import CrowdDataset # 원본 코드로 사용. 데이터 전처리 코드 수정하니 결과가 더 안 좋음..
 from models import build_model
 import torch.nn.functional as F
 import numpy as np
