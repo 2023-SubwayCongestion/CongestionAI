@@ -111,3 +111,4 @@ datasets/
 weights/
 workspace/
 vgg/
+nohup.out
