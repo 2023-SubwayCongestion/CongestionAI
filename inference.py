@@ -57,7 +57,7 @@ if __name__ == "__main__":
     mcnn = MCNN().to(torch.device("cuda"))
     mcnn.load_state_dict(torch.load(model_param_path))
 
-    image_path = '/path/to/your/input/image.jpg'
-    save_path = '/path/to/your/output/image.jpg'
+    image_path = './demo/image.jpg'
+    save_path = './demo/image.jpg'
 
     infer_and_save(mcnn, image_path, save_path)
