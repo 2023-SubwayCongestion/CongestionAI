@@ -4,14 +4,15 @@ import torch.nn as nn
 import visdom
 import random
 import argparse
-from tqdm import tqdm
+# from tqdm import tqdm
 from mcnn_model import MCNN
-from my_dataloader_origin import CrowdDataset # 원본 코드로 사용. 데이터 전처리 코드 수정하니 결과가 더 안 좋음..
+from my_dataloader import CrowdDataset
 from models import build_model
 import torch.nn.functional as F
 import numpy as np
 import scipy.spatial
 import scipy.ndimage
+os.environ["CUDA_VISIBLE_DEVICES"]="7"
 
 def get_args_parser():
     parser = argparse.ArgumentParser(
@@ -186,7 +187,7 @@ if __name__=="__main__":
         teacher_model.eval()
         epoch_loss=0
         
-        for i,(img,gt_dmap) in enumerate(tqdm(dataloader)):
+        for i,(img,gt_dmap) in enumerate(dataloader):
             img_np = tensor_to_img(img) # tensor인 img -> numpy 변환
             img = img.to(device)
             gt_dmap = gt_dmap.to(device)
@@ -223,7 +224,7 @@ if __name__=="__main__":
 
         mcnn.eval()
         mae=0
-        for i,(img,gt_dmap) in enumerate(tqdm(test_dataloader)):
+        for i,(img,gt_dmap) in enumerate(test_dataloader):
             img=img.to(device)
             gt_dmap=gt_dmap.to(device)
             # forward propagation
