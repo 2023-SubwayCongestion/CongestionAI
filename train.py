@@ -9,6 +9,9 @@ from mcnn_model import MCNN
 from my_dataloader import CrowdDataset
 from models import build_model
 import torch.nn.functional as F
+import numpy as np
+import scipy.spatial
+import scipy.ndimage
 
 def get_args_parser():
     parser = argparse.ArgumentParser(
@@ -72,9 +75,17 @@ def get_args_parser():
 
     return parser
 
-import numpy as np
-import scipy.spatial
-import scipy.ndimage
+def tensor_to_img(tensor):
+    # Convert tensor from CxHxW to HxWxC
+    img_np = tensor.squeeze(0).permute(1, 2, 0).cpu().numpy()
+
+    # Convert [-1, 1] range to [0, 1] 
+    img_np = (img_np + 1) / 2.0
+
+    # If needed, convert to [0, 255] range
+    # img_np = (img_np * 255).astype(np.uint8)
+
+    return img_np
 
 def teacher_density_map(img, teacher_points):
     """
@@ -89,7 +100,6 @@ def teacher_density_map(img, teacher_points):
     teacher_points = teacher_points.squeeze(0)
     # Convert to numpy array
     teacher_points = teacher_points.cpu().numpy()
-    
     img_shape = [img.shape[0], img.shape[1]]
     
     # Initialize density map
@@ -117,7 +127,7 @@ def teacher_density_map(img, teacher_points):
         
         # If more than one point, use average of three smallest distances as sigma
         if len(teacher_points) > 1:
-            sigma = np.mean(distances[i][1:4])
+            sigma = (distances[i][1]+distances[i][2]+distances[i][3])*0.1
         else:
             # If only one point, use average of the image dimensions as sigma
             sigma = np.average(np.array(img_shape)) / 2. / 2.
@@ -177,6 +187,7 @@ if __name__=="__main__":
         epoch_loss=0
         
         for i,(img,gt_dmap) in enumerate(tqdm(dataloader)):
+            img_np = tensor_to_img(img) # tensor인 img -> numpy 변환
             img = img.to(device)
             gt_dmap = gt_dmap.to(device)
             
@@ -190,8 +201,12 @@ if __name__=="__main__":
             
             # distillation loss 계산
             # Create density map from teacher's output
-            teacher_density_map = teacher_density_map(img, teacher_dmap['pred_points'])
-            distill_loss = criterion(et_dmap, teacher_density_map)
+            to_density_map = teacher_density_map(img_np, teacher_dmap['pred_points'])
+            teacher_dmap = torch.tensor(to_density_map).unsqueeze(0).unsqueeze(0).to(device)
+            et_dmap = F.interpolate(et_dmap, size=(400, 400), mode='bilinear', align_corners=False)
+            # print(et_dmap.shape) # torch.Size([1, 1, 100, 100])
+            # print(teacher_density_map.shape) # torch.Size([1, 1, 400, 400])
+            distill_loss = criterion(et_dmap, teacher_dmap)
             
             # Combine the original loss and distillation loss
             loss = (1 - alpha) * original_loss + alpha * distill_loss

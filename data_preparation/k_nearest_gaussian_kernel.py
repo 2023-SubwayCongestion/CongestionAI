@@ -1,7 +1,7 @@
 import numpy as np
 import scipy
 import scipy.io as io
-from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage import gaussian_filter
 import os
 import glob
 from matplotlib import pyplot as plt
@@ -58,7 +58,7 @@ def gaussian_filter_density(img,points):
 if __name__=="__main__":
     # show an example to use function generate_density_map_with_fixed_kernel.
     # root = 'D:\\workspaceMaZhenwei\\GithubProject\\Crowd_counting_from_scratch\\data'
-    root = r'/home/add/dataset/ShanghaiTech'
+    root = r'/workspace/lito9928/MCNN/datasets/ShanghaiTech'
     
     # now generate the ShanghaiA's ground truth
     part_A_train = os.path.join(root,'part_A_final/train_data','images')
