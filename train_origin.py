@@ -6,14 +6,13 @@ import random
 import argparse
 from tqdm import tqdm
 from mcnn_model import MCNN
-from my_dataloader import CrowdDataset
+from my_dataloader_origin import CrowdDataset
 from models import build_model
 import torch.nn.functional as F
 import numpy as np
 import scipy.spatial
 import scipy.ndimage
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"]="5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"]="7"
 
 def get_args_parser():
     parser = argparse.ArgumentParser(
@@ -77,25 +76,17 @@ def get_args_parser():
 
     return parser
 
-# def tensor_to_img(tensor):
-#     # Convert tensor from CxHxW to HxWxC
-#     img_np = tensor.squeeze(0).permute(1, 2, 0).cpu().numpy()
+def tensor_to_img(tensor):
+    # Convert tensor from CxHxW to HxWxC
+    img_np = tensor.squeeze(0).permute(1, 2, 0).cpu().numpy()
 
-#     # Convert [-1, 1] range to [0, 1] 
-#     img_np = (img_np + 1) / 2.0
+    # Convert [-1, 1] range to [0, 1] 
+    img_np = (img_np + 1) / 2.0
 
-#     # If needed, convert to [0, 255] range
-#     # img_np = (img_np * 255).astype(np.uint8)
+    # If needed, convert to [0, 255] range
+    # img_np = (img_np * 255).astype(np.uint8)
 
-#     return img_np
-
-def tensor_to_img(tensor): # batch 여러개 (1개 X)
-    imgs_np = [img.permute(1, 2, 0).cpu().numpy() for img in tensor]
-    
-    # 각 이미지에 대해 연산 수행
-    imgs_np = [(img + 1) / 2.0 for img in imgs_np]
-    
-    return imgs_np
+    return img_np
 
 def teacher_density_map(img, teacher_points):
     """
@@ -157,18 +148,19 @@ if __name__=="__main__":
     device=torch.device("cuda")
     mcnn=MCNN().to(device)
     criterion=nn.MSELoss(size_average=False).to(device)
-    optimizer = torch.optim.SGD(mcnn.parameters(), lr=1e-6,
-                                momentum=0.95)
+    optimizer = torch.optim.Adam(mcnn.parameters())
+    # optimizer = torch.optim.SGD(mcnn.parameters(), lr=1e-6,
+    #                             momentum=0.95)
     
     img_root='./datasets/ShanghaiTech/part_A_final/train_data/images'
     gt_dmap_root='./datasets/ShanghaiTech/part_A_final/train_data/ground-truth'
-    dataset=CrowdDataset(img_root,gt_dmap_root,4, dataset_name = 'SHA', is_train = True)
-    dataloader=torch.utils.data.DataLoader(dataset,batch_size=100,shuffle=True)
+    dataset=CrowdDataset(img_root,gt_dmap_root,4)
+    dataloader=torch.utils.data.DataLoader(dataset,batch_size=1,shuffle=True)
 
     test_img_root='./datasets/ShanghaiTech/part_A_final/test_data/images'
     test_gt_dmap_root='./datasets/ShanghaiTech/part_A_final/test_data/ground-truth'
-    test_dataset=CrowdDataset(test_img_root,test_gt_dmap_root,4, dataset_name = 'SHA', is_train = False)
-    test_dataloader=torch.utils.data.DataLoader(test_dataset,batch_size=100,shuffle=False)
+    test_dataset=CrowdDataset(test_img_root,test_gt_dmap_root,4)
+    test_dataloader=torch.utils.data.DataLoader(test_dataset,batch_size=1,shuffle=False)
 
     # get the P2PNet model
      # teacher p2pnet
@@ -177,7 +169,9 @@ if __name__=="__main__":
     teacher_checkpoint = torch.load(teacher_weights, map_location='cuda') # 모델 로드
     teacher_model.load_state_dict(teacher_checkpoint['model'])
     teacher_model.to(device)
-    
+    # 각 파라미터의 크기 출력
+    for name, param in teacher_model.named_parameters():
+        print(f'Parameter name: {name}, Size: {param.size()}')
     # distillation parameter, 일단 0.5로 설정 (distillation loss와 student model loss를 어느 비율로 반영할 것인지를 결정)
     alpha = 0.5
 
@@ -189,14 +183,14 @@ if __name__=="__main__":
     train_loss_list=[]
     epoch_list=[]
     test_error_list=[]
-    for epoch in tqdm(range(0,2000)):
+    for epoch in range(0,2000):
 
         mcnn.train()
         # teacher model은 학습 X
         teacher_model.eval()
         epoch_loss=0
         
-        for i,(img,gt_dmap) in enumerate(dataloader):
+        for i,(img,gt_dmap) in enumerate(tqdm(dataloader)):
             img_np = tensor_to_img(img) # tensor인 img -> numpy 변환
             img = img.to(device)
             gt_dmap = gt_dmap.to(device)
@@ -233,7 +227,7 @@ if __name__=="__main__":
 
         mcnn.eval()
         mae=0
-        for i,(img,gt_dmap) in enumerate(test_dataloader):
+        for i,(img,gt_dmap) in enumerate(tqdm(test_dataloader)):
             img=img.to(device)
             gt_dmap=gt_dmap.to(device)
             # forward propagation
