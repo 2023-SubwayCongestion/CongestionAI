@@ -12,6 +12,9 @@ import torch.nn.functional as F
 import numpy as np
 import scipy.spatial
 import scipy.ndimage
+import ray
+
+ray.init(ignore_reinit_error=True)
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "5,6,7"
@@ -190,6 +193,47 @@ def teacher_density_map(img, teacher_points):
     return density
 
 
+@ray.remote
+def train_one_epoch(
+    epoch, dataloader, teacher_model, mcnn, criterion, optimizer, alpha, device
+):
+    mcnn.train()
+    teacher_model.eval()
+    epoch_loss = 0
+
+    for i, (img, gt_dmap) in enumerate(dataloader):
+        img_np = tensor_to_img(img)  # tensor인 img -> numpy 변환
+        img = img.to(device)
+        gt_dmap = gt_dmap.to(device)
+
+        # Forward propagation through mcnn (student) and p2pnet (teacher)
+        et_dmap = mcnn(img)
+        with torch.no_grad():
+            teacher_dmap = teacher_model(img)
+
+        # original MSE loss 계산
+        original_loss = criterion(et_dmap, gt_dmap)
+
+        # distillation loss 계산
+        to_density_map = teacher_density_map(img_np, teacher_dmap["pred_points"])
+        teacher_dmap = torch.tensor(to_density_map).unsqueeze(0).unsqueeze(0).to(device)
+        et_dmap = F.interpolate(
+            et_dmap, size=(400, 400), mode="bilinear", align_corners=False
+        )
+        distill_loss = criterion(et_dmap, teacher_dmap)
+
+        # Combine the original loss and distillation loss
+        loss = (1 - alpha) * original_loss + alpha * distill_loss
+
+        epoch_loss += loss.item()
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    return epoch_loss
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         "P2PNet knowledge distillation training and evaluation script",
@@ -202,7 +246,7 @@ if __name__ == "__main__":
     device = torch.device("cuda")
     mcnn = MCNN().to(device)
     criterion = nn.MSELoss(size_average=False).to(device)
-    optimizer = torch.optim.Adam(mcnn.parameters(), lr=1e-4)
+    optimizer = torch.optim.SGD(mcnn.parameters(), lr=1e-6, momentum=0.95)
 
     img_root = "./datasets/ShanghaiTech/part_A_final/train_data/images"
     gt_dmap_root = "./datasets/ShanghaiTech/part_A_final/train_data/ground-truth"
