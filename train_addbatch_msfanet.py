@@ -7,13 +7,13 @@ import argparse
 # from tqdm import tqdm
 from mcnn_model import MCNN
 from my_dataloader import CrowdDataset
-from models import build_model
+# from models import build_model
+from models import M_SFANet
 import torch.nn.functional as F
 import numpy as np
 import scipy.spatial
 import scipy.ndimage
 from tqdm import tqdm
-
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
@@ -24,7 +24,7 @@ def get_args_parser():
     parser.add_argument('--lr_backbone', default=1e-5, type=float)
     parser.add_argument('--batch_size', default=4, type=int)
     parser.add_argument('--weight_decay', default=1e-4, type=float)
-    parser.add_argument('--epochs', default=3500, type=int)  # 원래 3500
+    parser.add_argument('--epochs', default=3500, type=int)  # ?? 3500
     parser.add_argument('--lr_drop', default=3500, type=int)
     parser.add_argument('--clip_max_norm', default=0.1, type=float,
                         help='gradient clipping max norm')
@@ -103,58 +103,6 @@ def tensor_to_img(tensor):
 
     return img_np
 
-
-# def teacher_density_map(img, teacher_points):
-#     """
-#     Generate a density map for the given image using the teacher_points.
-
-#     img: input image
-#     teacher_points: a list of pedestrian locations in the format [[col, row], [col, row], ...]
-
-#     return:
-#     density: the density-map corresponding to the given points. It has the same shape as the input image.
-#     """
-#     print("Before:", teacher_points.shape)
-#     teacher_points = teacher_points.squeeze(0)
-#     print("After:", teacher_points.shape)
-#     # Convert to numpy array
-#     teacher_points = teacher_points.cpu().numpy()
-#     img_shape = [img.shape[0], img.shape[1]]
-    
-#     # Initialize density map
-#     density = np.zeros(img_shape, dtype=np.float32)
-    
-#     # If there are no points, return the empty density map
-#     if len(teacher_points) == 0:
-#         return density
-    
-#     leafsize = 2048
-#     # Build KDTree for the given points
-#     tree = scipy.spatial.KDTree(teacher_points.copy(), leafsize=leafsize)
-    
-#     # Query KDTree for distances
-#     distances, _ = tree.query(teacher_points, k=4)
-
-#     for i, pt in enumerate(teacher_points):
-#         pt2d = np.zeros(img_shape, dtype=np.float32)
-        
-#         # Check boundary conditions
-#         if 0 <= int(pt[1]) < img_shape[0] and 0 <= int(pt[0]) < img_shape[1]:
-#             pt2d[int(pt[1]), int(pt[0])] = 1.
-#         else:
-#             continue
-        
-#         # If more than one point, use average of three smallest distances as sigma
-#         if len(teacher_points) > 1:
-#             sigma = (distances[i][1]+distances[i][2]+distances[i][3])*0.1
-#         else:
-#             # If only one point, use average of the image dimensions as sigma
-#             sigma = np.average(np.array(img_shape)) / 2. / 2.
-
-#         density += scipy.ndimage.filters.gaussian_filter(pt2d, sigma, mode='constant')
-
-#     return density
-# 수정
 def teacher_density_map(img, teacher_points):
     """
     Generate a density map for the given image using the teacher_points.
@@ -216,7 +164,7 @@ def teacher_density_map(img, teacher_points):
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(
-        'P2PNet knowledge distillation training and evaluation script', parents=[get_args_parser()])
+        'M-SFANet knowledge distillation training and evaluation script', parents=[get_args_parser()])
     args = parser.parse_args()
     
     torch.backends.cudnn.enabled=False
@@ -238,52 +186,51 @@ if __name__=="__main__":
     test_dataset=CrowdDataset(test_img_root,test_gt_dmap_root,4, dataset_name = 'SHA', is_train = False)
     test_dataloader=torch.utils.data.DataLoader(test_dataset,batch_size=1,shuffle=False)
 
-    # get the P2PNet model
-     # teacher p2pnet
-    teacher_model, _ = build_model(args, training=True)
-    teacher_weights = "./weights/SHTechA.pth"  # 선생님 모델의 가중치 경로
-    teacher_checkpoint = torch.load(teacher_weights, map_location='cuda') # 모델 로드
+    # get the M-SFANet model
+     # teacher M-SFANet
+    teacher_model = M_SFANet.Model()
+    teacher_weights = "./weights/best_MSFANet_A.pth" # ? ?? ëŞ¨ë¸? ę°?ě¤ěš ę˛˝ëĄ
+    teacher_checkpoint = torch.load(teacher_weights, map_location='cuda') # ëŞ¨ë¸ ëĄë
     teacher_model.load_state_dict(teacher_checkpoint['model'])
     teacher_model.to(device)
     
-    # distillation parameter, 일단 0.5로 설정 (distillation loss와 student model loss를 어느 비율로 반영할 것인지를 결정)
+    # distillation parameter, ?ź?¨ 0.5ëĄ? ?¤?  (distillation loss??? student model lossëĽ? ?´? ëšě¨ëĄ? ë°ě?  ę˛ě¸ě§?ëĽ? ę˛°ě )
     alpha = 0.5
 
     #training phase
-    if not os.path.exists('./checkpoints'):
-        os.mkdir('./checkpoints')
+    if not os.path.exists('./checkpoints/msfanet'):
+        os.mkdir('./checkpoints/msfanet')
     min_mae=10000
     min_epoch=0
     train_loss_list=[]
     epoch_list=[]
     test_error_list=[]
-
     for epoch in tqdm(range(0,2000)):
 
         mcnn.train()
-        # teacher model은 학습 X
+        # teacher model??? ??ľ X
         teacher_model.eval()
         epoch_loss=0
         
         for i,(img,gt_dmap) in enumerate(dataloader):
-            img_np = tensor_to_img(img) # tensor인 img -> numpy 변환
+            img_np = tensor_to_img(img) # tensor?¸ img -> numpy ëł??
             img = img.to(device)
             gt_dmap = gt_dmap.to(device)
             
             # Forward propagation through mcnn (student) and p2pnet (teacher)
             et_dmap = mcnn(img)
             with torch.no_grad():  
-                teacher_dmap = teacher_model(img)
+                teacher_dmap, _ = teacher_model(img)
 
-            # original MSE loss 계산
+            # original MSE loss ęłě°
             original_loss = criterion(et_dmap, gt_dmap)
             
-            # distillation loss 계산
+            # distillation loss ęłě°
             # Create density map from teacher's output
-            to_density_map = teacher_density_map(img_np, teacher_dmap['pred_points'])
+            # to_density_map = teacher_density_map(img_np, teacher_dmap['pred_points'])
             #print(to_density_map.shape)
-            # 수정
-            teacher_dmap = torch.tensor(to_density_map).squeeze(1).squeeze(1).unsqueeze(1).to(device)
+            # ?? 
+            teacher_dmap = torch.tensor(teacher_dmap).squeeze(1).squeeze(1).unsqueeze(1).to(device)
             print("teacher_dmap:",teacher_dmap.shape) 
             et_dmap = F.interpolate(et_dmap, size=(400, 400), mode='bilinear', align_corners=False)
             print("et_dmap:",et_dmap.shape) # torch.Size([32, 1, 400, 400])
@@ -301,7 +248,7 @@ if __name__=="__main__":
         print("epoch:",epoch,"loss:",epoch_loss/len(dataloader))
         epoch_list.append(epoch)
         train_loss_list.append(epoch_loss/len(dataloader))
-        torch.save(mcnn.state_dict(),'./checkpoints/epoch_'+str(epoch)+".param")
+        torch.save(mcnn.state_dict(),'./checkpoints/msfanet/epoch_'+str(epoch)+".param")
 
         mcnn.eval()
         mae=0
