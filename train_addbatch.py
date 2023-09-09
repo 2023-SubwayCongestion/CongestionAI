@@ -14,6 +14,7 @@ import scipy.spatial
 import scipy.ndimage
 from tqdm import tqdm
 
+
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 def get_args_parser():
@@ -256,6 +257,7 @@ if __name__=="__main__":
     train_loss_list=[]
     epoch_list=[]
     test_error_list=[]
+
     for epoch in tqdm(range(0,2000)):
 
         mcnn.train()
